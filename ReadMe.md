@@ -1,48 +1,19 @@
-﻿# WordSearch Puzzle Solver — Final Lab
+# WordSearch Puzzle Solver — Final Lab
 
 A C++ investigation into alternative data structures for solving WordSearch puzzles. Four combinations of grid and dictionary representations are benchmarked against each other, measuring solve time, memory usage, and visit counts.
 
 ---
 
-## Project Structure
+## Building
 
-```
-FinalLab/
-├── Main.cpp            # Entry point — runs all four solver configurations
-├── WordSearch.h        # Class, struct, and interface declarations
-├── WordSearch.cpp      # Method implementations
-├── grid.txt            # Input puzzle grid
-└── dictionary.txt      # Input word list
-```
-
+No third-party libraries are used — only the C++ standard library.
+1. Open the solution in Visual Studio 2022
+2. Select the **Release** build configuration (required for accurate performance timing)
+3. Build and run
 ---
 
 ## Parasoft
-
-<img width="1919" height="1079" alt="image" src="https://github.com/user-attachments/assets/a77485cd-1be7-4b48-8935-8b16e98d7876" />
-
-## How It Works
-
-`Main.cpp` runs four independent solver configurations in sequence. Each creates a fresh `WordSearch` instance, populates one grid structure and one dictionary structure, solves the puzzle, and writes results to a uniquely named output file.
-
-```
-grid.txt + dictionary.txt
-         │
-    ┌────┴────┐
-    │ WordSearch │
-    └────┬────┘
-         │
-  ┌──────┴──────┐
-  │  solve()    │
-  └──────┬──────┘
-         │
-  ┌──────┴──────────────────────────────────────────┐
-  │  simple_puzzle_simple_dictionary.txt             │
-  │  advanced_puzzle_simple_dictionary.txt           │
-  │  simple_puzzle_advanced_dictionary.txt           │
-  │  advanced_puzzle_advanced_dictionary.txt         │
-  └─────────────────────────────────────────────────┘
-```
+<img width="1919" height="1079" alt="Screenshot 2026-05-06 012634" src="https://github.com/user-attachments/assets/c7faf46e-0b24-42cd-ba60-837d67aaee89" />
 
 ---
 
@@ -61,14 +32,15 @@ The grid is stored as a flat vector of `GridCell` structs. Each cell holds its l
 ```cpp
 struct GridCell
 {
-    char letter = '\0';
-    int row = 0;
-    int col = 0;
-    std::array<GridCell*, 8> neighbors{};
+    // Members ordered largest → smallest for optimal memory alignment
+    std::array<GridCell*, 8> neighbors{};   // 64 bytes
+    int row = 0;                            //  4 bytes
+    int col = 0;                            //  4 bytes
+    char letter = '\0';                     //  1 byte  (+3 bytes padding)
 };
 ```
 
-> Members are ordered `char → int → pointer array` for optimal memory alignment.
+> Members are ordered `pointer array → int → int → char` for optimal memory alignment, minimising internal padding.
 
 ---
 
@@ -78,20 +50,21 @@ struct GridCell
 
 Words are stored in a flat vector and searched sequentially. No prefix pruning is possible — every candidate sequence must be checked against the full list.
 
-**Advanced Dictionary — Trie (`TrieNode*`)**
+**Advanced Dictionary — Trie (`std::unique_ptr<TrieNode, TrieDeleter>`)**
 
 A Trie (prefix tree) where each node covers one character and holds up to 26 child pointers. Words are inserted character by character; terminal nodes are marked with `isWord = true` and store the complete word string. During solving, traversal can be **abandoned early** the moment no valid prefix exists — significantly cutting the search space.
 
 ```cpp
 struct TrieNode
 {
-    bool isWord = false;
-    std::string word;
-    std::array<TrieNode*, 26> children{};
+    // Members ordered largest → smallest for optimal memory alignment
+    std::array<TrieNode*, 26> children{};   // 208 bytes
+    std::string word;                       //  32 bytes
+    bool isWord = false;                    //   1 byte  (+7 bytes padding)
 };
 ```
 
-> The Trie root is heap-allocated and **owned** by `WordSearch`. It is recursively deleted in the destructor via `deleteTrie()`.
+> The Trie root is heap-allocated and **owned** by `WordSearch` via `std::unique_ptr<TrieNode, TrieDeleter>`. `TrieDeleter` is a named functor that recursively deletes all nodes; it is invoked automatically when the `unique_ptr` goes out of scope, with no manual destructor code required.
 
 ---
 
@@ -112,15 +85,15 @@ struct TrieNode
 
 ### `PerformanceResult`
 
-Plain struct used to pass timing and memory data from `WordSearch` back to `main`.
+Plain struct used to pass timing and memory data from `WordSearch` back to `main`. Members are ordered largest → smallest to minimise padding.
 
 | Field | Type | Description |
 |---|---|---|
-| `puzzleSize` | `uint32_t` | Byte size of the grid data structure |
-| `dictionarySize` | `uint32_t` | Byte size of the dictionary data structure |
 | `timeToCreatePuzzle` | `std::chrono::microseconds` | Grid population time |
 | `timeToCreateDictionary` | `std::chrono::microseconds` | Dictionary population time |
 | `timeToSolve` | `std::chrono::microseconds` | Puzzle solving time |
+| `puzzleSize` | `uint32_t` | Byte size of the grid data structure |
+| `dictionarySize` | `uint32_t` | Byte size of the dictionary data structure |
 
 ---
 
@@ -129,9 +102,8 @@ Plain struct used to pass timing and memory data from `WordSearch` back to `main
 Declared `final` because its destructor is non-virtual. Follows the **Rule of 5**:
 
 - Copy constructor and copy assignment are **deleted** (owns heap memory via `_trieRoot`)
-- Move constructor is defaulted
-- Move assignment is declared (implemented in `.cpp`)
-- Destructor calls `deleteTrie(_trieRoot)` to safely free Trie memory
+- Move constructor and move assignment are **defaulted**
+- Destructor is **defaulted** — `std::unique_ptr<TrieNode, TrieDeleter>` handles all Trie cleanup automatically
 
 #### Public Methods
 
@@ -147,23 +119,25 @@ Declared `final` because its destructor is non-virtual. Follows the **Rule of 5*
 
 #### Private Members
 
-| Member | Type | Description |
-|---|---|---|
-| `_puzzleFile` | `const std::string` | Path to puzzle input |
-| `_dictionaryFile` | `const std::string` | Path to dictionary input |
-| `_gridSize` | `int` | Side length of the square grid |
-| `_simpleGrid` | `vector<vector<char>>` | Simple 2D grid |
-| `_advancedCells` | `vector<GridCell>` | Flat graph of cells with neighbour pointers |
-| `_topLeft` | `GridCell*` | Non-owning pointer to cell at (0,0) in the advanced grid |
-| `_simpleDictionary` | `vector<string>` | Flat word list |
-| `_trieRoot` | `TrieNode*` | Owning pointer to Trie root |
-| `_wordList` | `vector<string>` | Master word list (used by both dictionary builders) |
-| `_usingAdvancedPuzzle` | `bool` | Dispatch flag for `solvePuzzle()` |
-| `_usingAdvancedDictionary` | `bool` | Dispatch flag for `solvePuzzle()` |
-| `_matchedWords` | `vector<MatchedWord>` | Words found in the grid |
-| `_unmatchedWords` | `vector<string>` | Words not found |
-| `_gridCellsVisited` | `uint64_t` | Total grid cell visits during solve |
-| `_dictEntriesVisited` | `uint64_t` | Total dictionary node/entry visits during solve |
+Members are grouped and ordered by size (largest → smallest) to minimise struct padding.
+
+| Member | Type | Size | Description |
+|---|---|---|---|
+| `_puzzleFile` | `const std::string` | 32B | Path to puzzle input |
+| `_dictionaryFile` | `const std::string` | 32B | Path to dictionary input |
+| `_simpleGrid` | `vector<vector<char>>` | 24B | Simple 2D grid |
+| `_advancedCells` | `vector<GridCell>` | 24B | Flat graph of cells with neighbour pointers |
+| `_simpleDictionary` | `vector<string>` | 24B | Flat word list |
+| `_wordList` | `vector<string>` | 24B | Master word list (used by both dictionary builders) |
+| `_matchedWords` | `vector<MatchedWord>` | 24B | Words found in the grid |
+| `_unmatchedWords` | `vector<string>` | 24B | Words not found |
+| `_trieRoot` | `unique_ptr<TrieNode, TrieDeleter>` | 8B | Owning pointer to Trie root |
+| `_topLeft` | `GridCell*` | 8B | Non-owning pointer to cell at (0,0) in the advanced grid |
+| `_gridCellsVisited` | `uint64_t` | 8B | Total grid cell visits during solve |
+| `_dictEntriesVisited` | `uint64_t` | 8B | Total dictionary node/entry visits during solve |
+| `_gridSize` | `int` | 4B | Side length of the square grid |
+| `_usingAdvancedPuzzle` | `bool` | 1B | Dispatch flag for `solvePuzzle()` |
+| `_usingAdvancedDictionary` | `bool` | 1B | Dispatch flag for `solvePuzzle()` |
 
 ---
 
@@ -175,19 +149,19 @@ classDiagram
 class WordSearch {
   -string _puzzleFile
   -string _dictionaryFile
-  -int _gridSize
   -vector~vector~char~~ _simpleGrid
   -vector~GridCell~ _advancedCells
-  -GridCell* _topLeft
   -vector~string~ _simpleDictionary
-  -TrieNode* _trieRoot
   -vector~string~ _wordList
-  -bool _usingAdvancedPuzzle
-  -bool _usingAdvancedDictionary
   -vector~MatchedWord~ _matchedWords
   -vector~string~ _unmatchedWords
+  -unique_ptr~TrieNode~ _trieRoot
+  -GridCell* _topLeft
   -uint64_t _gridCellsVisited
   -uint64_t _dictEntriesVisited
+  -int _gridSize
+  -bool _usingAdvancedPuzzle
+  -bool _usingAdvancedDictionary
   +createSimplePuzzle(duration) uint32_t
   +createAdvancedPuzzle(duration) uint32_t
   +createSimpleDictionary(duration) uint32_t
@@ -198,96 +172,106 @@ class WordSearch {
   -solveSimpleAdvanced() void
   -solveAdvancedSimple() void
   -solveAdvancedAdvanced() void
-  -deleteTrie(node) void
+}
+
+class TrieDeleter {
+  +operator()(node) void
 }
 
 class GridCell {
-  char letter
+  array~GridCell*,8~ neighbors
   int row
   int col
-  array~GridCell*,8~ neighbors
+  char letter
 }
 
 class TrieNode {
-  bool isWord
-  string word
   array~TrieNode*,26~ children
+  string word
+  bool isWord
 }
 
 class MatchedWord {
+  string word
   int col
   int row
-  string word
 }
 
 class PerformanceResult {
-  uint32_t puzzleSize
-  uint32_t dictionarySize
   microseconds timeToCreatePuzzle
   microseconds timeToCreateDictionary
   microseconds timeToSolve
+  uint32_t puzzleSize
+  uint32_t dictionarySize
 }
 
 WordSearch --> GridCell
 WordSearch --> TrieNode
+WordSearch --> TrieDeleter
 WordSearch --> MatchedWord
 WordSearch ..> PerformanceResult
+TrieDeleter ..> TrieNode
 ```
 
 ---
 
-## Output Format
+## Design
+**Data Structures, Organisation and Operation**
 
-Each of the four output files must follow this exact format:
+This program implements two grid representations and two dictionary representations, combined into four solver configurations.
+Simple Grid (std::vector<std::vector<char>>) stores the puzzle as a 2D vector of characters. It is populated row by row from the input file. During solving, a pair of nested loops iterates over every (row, col) starting position; for each of the 8 compass directions a further loop steps through the grid using index arithmetic (r + k * DR, c + k * DC), performing a bounds check at every step. The structure is straightforward and cache-friendly for row-wise access, but the repeated index arithmetic and bounds checking add overhead per character comparison.
+Advanced Grid (std::vector<GridCell>) stores the puzzle as a flat vector of GridCell objects. Each cell records its letter, row, and column, and holds an array of 8 non-owning pointers to its neighbours, computed once at construction time. During solving, traversal follows these pre-linked pointers directly no arithmetic, no bounds checking per step. The _topLeft pointer provides a fixed entry point, with row traversal going south via neighbors[4] and column traversal going east via neighbors[2]. The trade-off is significantly higher memory per cell (a 64-byte pointer array vs. one byte for the simple grid).
+Simple Dictionary (std::vector<std::string>) stores all words in a flat sequential list. Searching iterates the entire list for every candidate sequence; there is no mechanism to prune the search early. It is very cheap to construct but expensive to search repeatedly.
+Advanced Dictionary (Trie via std::unique_ptr<TrieNode, TrieDeleter>) stores words as a prefix tree. Each TrieNode holds up to 26 child pointers (one per letter A–Z), a flag marking word terminals, and the full word string at terminals. Insertion walks or creates nodes character by character. During solving, traversal descends one node per letter; if no child exists for the current letter, the entire subtree is abandoned immediately. This prefix pruning means large portions of the search space are discarded without examining every word individually.
 
-```
-Number of words matched: n
+**Critique of the Design**
+**Merits**
+The grid and dictionary are completely decoupled, either can be swapped independently, which is what makes the four-configuration benchmark possible. Each configuration has its own dedicated solver method, so every code path is isolated, easy to read, and straightforward to profile. Memory ownership is explicit: the WordSearch class owns the Trie via std::unique_ptr<TrieNode, TrieDeleter>, and all GridCell neighbour pointers are non-owning raw pointers into the stable flat vector, making ownership semantics clear. All structs and class members are ordered largest-to-smallest to minimise padding, and WordSearch is declared final to prevent unsafe inheritance from a class with a non-virtual destructor.
+**Weaknesses**
+The four solver methods (solveSimpleSimple, solveSimpleAdvanced, solveAdvancedSimple, solveAdvancedAdvanced) each implement their own traversal loop, leading to significant code duplication that would be difficult to maintain or extend. Storing a complete std::string at every Trie terminal node is memory-inefficient. A word index into _wordList would achieve the same result at a fraction of the cost. The duplicate-detection sets inside each solver use std::set<std::string>, which has O(log n) lookup; std::unordered_set would give O(1) average case. Finally, the advanced grid's 8 pointer-sized neighbours per cell (64 bytes) means each cell is much larger than a character, which can increase cache pressure on large grids.
+What Would You Change ?
+The most impactful change would be replacing the four duplicated solver methods with a strategy pattern. An abstract traversal interface with concrete implementations injected at runtime. This would reduce the codebase considerably and make adding new grid or dictionary types a matter of writing a single new class rather than touching the existing switch logic. The full std::string in each TrieNode would be replaced with a uint32_t index into _wordList, and std::set would be replaced with std::unordered_set throughout. Both changes reduce memory and improve lookup time at negligible implementation cost.
 
-Words matched in grid:
-col row WORD1
-col row WORD2
+## Performance Analysis
+Comparison Across the Four Configurations
 
-Words unmatched in grid:
-WORDn
+The four configurations differ in both how the grid is traversed and how words are looked up, and these differences compound each other in measurable ways.
 
-Number of grid cells visited: n
+Configuration 1 - Simple Grid + Simple Dictionary (solveSimpleSimple)
+This is the baseline. For each word in the dictionary the solver visits every (row, col, direction) triple in the grid, performing index arithmetic and bounds checking at every step. Both the grid traversal and the dictionary lookup scale poorly: grid cells visited is O(W × N² × 8 × L) where W is the word count, N is the grid side length, and L is the average word length. Dictionary entries visited matches W directly since every word is tested from every starting position. This combination is expected to produce the highest cell visit count and the longest solve time.
 
-Number of dictionary entries visited: n
+Configuration 2 - Advanced Grid + Simple Dictionary (solveAdvancedSimple)
+Replacing the simple grid with the linked GridCell structure eliminates index arithmetic and bounds checking during traversal - pointer following replaces both. Grid cell visits are the same in count but cheaper per visit. However, the dictionary lookup is unchanged; every word still drives an exhaustive search across all starting cells. The reduction in per-step compute cost should be visible in the solve time, but the overall algorithmic complexity is the same as Configuration 1. The construction time for the advanced grid is higher because neighbour pointers must be linked.
 
-Time to populate grid: t
+Configuration 3 - Simple Grid + Advanced Dictionary (solveSimpleAdvanced)
+This is the more architecturally significant change. Instead of selecting words from the dictionary and searching the grid for each, the solver now visits every (row, col, direction) triple once and walks the Trie simultaneously. The moment no valid prefix child exists, that direction is abandoned. This dramatically reduces dictionary entries visited because common prefixes are only evaluated once rather than once per word that shares them. Grid cell visits also decrease because short-circuit exit stops traversal early. Solve time is expected to be substantially lower than Configurations 1 and 2 despite the simple grid's arithmetic overhead.
 
-Time to populate dictionary: t
+Configuration 4 - Advanced Grid + Advanced Dictionary (solveAdvancedAdvanced)
+This combines the pointer-following traversal of the advanced grid with the prefix-pruning Trie lookup. It is expected to be the fastest configuration: traversal is cheap (no arithmetic or bounds checks), and prefix pruning minimises both grid cell visits and dictionary entries visited. The construction overhead is highest here (both the neighbour-linking pass and the Trie insertion), but this cost is paid once and amortised across the solve.
 
-Time to solve puzzle: t
+Dictionary-first vs. Grid-first Traversal
+The two fundamental algorithmic strategies differ in which structure drives the outer loop.
+In dictionary-first traversal (Configurations 1 and 2), each word is selected from the dictionary and then searched for exhaustively across the grid. This means every word causes a full O(N² × 8) scan, regardless of whether that word could possibly appear. With a large dictionary and a small grid, most of this work is wasted. The simple dictionary amplifies this because every word must be individually driven through the outer loop - there is no shared prefix work.
 
-Size of the grid data structure: b
-
-Size of the dictionary data structure: b
-```
-
-- `n` — integer
-- `t` — floating-point number in **seconds**
-- `b` — integer in **bytes**
-- Word positions use **0-based** column, row ordering — e.g. `0 2 HAND` means the word HAND starts at column 0, row 2
-
----
+In grid-first traversal (Configurations 3 and 4), each grid position drives the outer loop and the dictionary structure is consulted incrementally as letters are read. The Trie is the key enabler: it allows the dictionary to be queried one letter at a time and returns a definitive "no match possible" the moment the current letter sequence diverges from all dictionary words. This collapses the search space significantly. The effect is strongest when the dictionary contains many words with common prefixes, because those prefixes are evaluated only once per grid traversal rather than once per word.
+The choice of data structure strongly influences which strategy is available. The simple vector dictionary cannot support grid-first traversal efficiently - there is no mechanism to query "does any word continue with letter X from this prefix?" without scanning the entire list. The Trie provides exactly this interface at O(1) per letter via its child pointer array. Conversely, the advanced grid's pointer-following traversal is a natural fit for grid-first strategies because following a neighbour pointer is the same operation regardless of direction, making the inner loop uniform and branch-prediction friendly. The combination of advanced grid and advanced dictionary (Configuration 4) therefore represents both the lowest visit counts and the lowest per-visit cost.
 
 ## Design Notes
 
 **Strengths**
 - Clear separation of concerns — grid and dictionary structures are fully independent
 - Four explicit solver methods make each code path easy to profile and reason about
-- Rule of 5 correctly applied; Trie memory is safely reclaimed via `deleteTrie()`
-- Structs are member-ordered for optimal memory alignment
+- Rule of 5 correctly applied; Trie memory is safely reclaimed automatically via `std::unique_ptr<TrieNode, TrieDeleter>`
+- All structs and class members ordered largest → smallest for optimal memory alignment, minimising padding
 - `WordSearch` declared `final` to prevent unsafe inheritance from a non-virtual destructor
+- `TrieDeleter` as a named functor makes Trie ownership unambiguous to both humans and static-analysis tools
 
 **Weaknesses / Known Limitations**
-- Raw `TrieNode*` ownership requires careful manual management; `std::unique_ptr` would be safer
 - Four separate solver methods duplicate traversal logic; a strategy pattern would be more maintainable
 - Storing a full `std::string word` at each Trie terminal node uses more memory than necessary
 - The advanced grid's 8 neighbour pointers per cell can hurt CPU cache performance on large grids
 
 **Potential Improvements**
-- Replace raw `TrieNode*` with `std::unique_ptr<TrieNode>` for automatic, exception-safe cleanup
 - Introduce a solver strategy interface to eliminate duplicated traversal code
 - Store only a word index (into `_wordList`) at Trie terminals rather than the full string
+- Replace `std::set<std::string>` duplicate-detection in solvers with `std::unordered_set` for O(1) average lookup
