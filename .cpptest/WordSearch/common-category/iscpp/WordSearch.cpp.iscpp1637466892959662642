@@ -1,0 +1,6 @@
+fileName=C:\Users\steph\source\repos\WordSearch\WordSearch.cpp
+isCpp=
+compilerOpts=-I"C:\Program Files\Parasoft\C++test for Visual Studio (x86_64)\10.7\engine\runtime\include" /Zi /W3 /O2 /EHsc /MD /fp:precise /Gd /GS /sdl /Oi /Oy- /Gm- /Gy /D"WIN32" /D"NDEBUG" /D"_CONSOLE" /D"_UNICODE" /D"UNICODE" /Zc:wchar_t /Zc:forScope /Zc:inline /WX- /nologo /FC /permissive- /diagnostics:column -DPARASOFT_CPPTEST -I.
+compilerId=vc_14_3
+workingDir=C:\Users\steph\source\repos\WordSearch\
+advancedOptionsHash=0

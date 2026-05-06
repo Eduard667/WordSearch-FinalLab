@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<ResultsSession>
+   <SessionData configName="500083 rule set 2025" configPseudoUrl="c++test.user://500083 rule set 2025" enabledAnalysis="Static" enabledHandlers="com.parasoft.xtest.checkers.api.scope.factory;com.parasoft.xtest.checkers.api.standards.factory" header="?? ??false??false??" runId="" startTime="1778027113114" tool="c++test">
+      <TestParameters cmdLn="C++test: -config c++test.user://500083 rule set 2025 "/>
+      <Authors/>
+      <Selection>
+         <Res id="WordSearch/WordSearch"/>
+      </Selection>
+      <XmlDataFiles/>
+   </SessionData>
+   <Locations/>
+   <CodingStandards>
+      <TestedFilesDetails>
+         <Total name="Suppressed / Total" supp="0" total="0">
+            <Project name="WordSearch" supp="0" total="0">
+               <Res name="Source Files" supp="0" total="0">
+                  <Res name="WordSearch.cpp" supp="0" total="0"/>
+                  <Res name="Main.cpp" supp="0" total="0"/>
+               </Res>
+               <Res name="Header Files" supp="0" total="0">
+                  <Res name="WordSearch.h" supp="0" total="0"/>
+               </Res>
+            </Project>
+         </Total>
+      </TestedFilesDetails>
+   </CodingStandards>
+</ResultsSession>

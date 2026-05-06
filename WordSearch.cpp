@@ -34,54 +34,38 @@ namespace
     }
 }
 
-// Constructor
-WordSearch::WordSearch(const std::string& puzzleFile,
-    const std::string& dictionaryFile)
-    : _puzzleFile(puzzleFile)
-    , _dictionaryFile(dictionaryFile)
-    , _gridSize(0)
-    , _topLeft(nullptr)
-    , _trieRoot(nullptr)
-    , _usingAdvancedPuzzle(false)
-    , _usingAdvancedDictionary(false)
-    , _gridCellsVisited(0)
-    , _dictEntriesVisited(0)
-{
-}
-
-// Destructor must not throw
-WordSearch::~WordSearch() noexcept
-{
-    try
-    {
-        if (_trieRoot != nullptr)
-        {
-            deleteTrie(_trieRoot);
-        }
-    }
-    catch (...)
-    {
-        // Destructors must not allow exceptions to escape
-    }
-
-    _trieRoot = nullptr;
-}
-
-// Safe recursive deletion of trie nodes
-void WordSearch::deleteTrie(TrieNode* const node)
+// TrieDeleter — defined here so the full TrieNode definition is in scope
+void TrieDeleter::operator()(TrieNode* node) const noexcept
 {
     if (node == nullptr)
     {
         return;
     }
 
-    for (int i = 0; i < 26; ++i)
+    for (TrieNode* const child : node->children)
     {
-        deleteTrie(node->children[i]);
+        (*this)(child);
     }
 
     delete node;
 }
+
+// Constructor
+WordSearch::WordSearch(const std::string& puzzleFile,
+    const std::string& dictionaryFile)
+    : _puzzleFile(puzzleFile)
+    , _dictionaryFile(dictionaryFile)
+    , _trieRoot(nullptr)
+    , _topLeft(nullptr)
+    , _gridCellsVisited(0)
+    , _dictEntriesVisited(0)
+    , _gridSize(0)
+    , _usingAdvancedPuzzle(false)
+    , _usingAdvancedDictionary(false)
+{
+}
+// Destructor is defaulted in the header; unique_ptr<TrieNode,TrieDeleter>
+// calls TrieDeleter::operator() automatically — no manual cleanup needed.
 
 // Create simple grid using vector<vector<char>>
 uint32_t WordSearch::createSimplePuzzle(std::chrono::microseconds& duration)
@@ -246,7 +230,7 @@ uint32_t WordSearch::createAdvancedDictionary(std::chrono::microseconds& duratio
 
     const auto start = std::chrono::high_resolution_clock::now();
 
-    _trieRoot = new TrieNode();
+    _trieRoot.reset(new TrieNode());
     uint32_t nodeCount = 1U;
 
     std::string word;
@@ -254,7 +238,7 @@ uint32_t WordSearch::createAdvancedDictionary(std::chrono::microseconds& duratio
     {
         _wordList.push_back(word);
 
-        TrieNode* node = _trieRoot;
+        TrieNode* node = _trieRoot.get();
         for (const char ch : word)
         {
             const int idx = ch - 'A';
@@ -327,7 +311,7 @@ void WordSearch::solveSimpleSimple()
 
                     if (match)
                     {
-                        _matchedWords.push_back({ c, r, word });
+                        _matchedWords.push_back({ word, c, r });
                         foundSet.insert(word);
                         found = true;
                     }
@@ -353,7 +337,7 @@ void WordSearch::solveSimpleAdvanced()
         {
             for (int d = 0; d < 8; ++d)
             {
-                TrieNode* node = _trieRoot;
+                TrieNode* node = _trieRoot.get();
                 int cr = r;
                 int cc = c;
 
@@ -378,7 +362,7 @@ void WordSearch::solveSimpleAdvanced()
                     if (node->isWord &&
                         foundSet.find(node->word) == foundSet.end())
                     {
-                        _matchedWords.push_back({ c, r, node->word });
+                        _matchedWords.push_back({ node->word, c, r });
                         foundSet.insert(node->word);
                     }
 
@@ -440,7 +424,7 @@ void WordSearch::solveAdvancedSimple()
 
                     if (match)
                     {
-                        _matchedWords.push_back({ cell->col, cell->row, word });
+                        _matchedWords.push_back({ word, cell->col, cell->row });
                         foundSet.insert(word);
                         found = true;
                     }
@@ -466,7 +450,7 @@ void WordSearch::solveAdvancedAdvanced()
         {
             for (int d = 0; d < 8; ++d)
             {
-                TrieNode* node = _trieRoot;
+                TrieNode* node = _trieRoot.get();
                 GridCell* cur = cell;
 
                 while (cur != nullptr)
@@ -489,7 +473,7 @@ void WordSearch::solveAdvancedAdvanced()
                     if (node->isWord &&
                         foundSet.find(node->word) == foundSet.end())
                     {
-                        _matchedWords.push_back({ cell->col, cell->row, node->word });
+                        _matchedWords.push_back({ node->word, cell->col, cell->row });
                         foundSet.insert(node->word);
                     }
 

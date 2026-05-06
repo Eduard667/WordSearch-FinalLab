@@ -1,0 +1,6 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<mergePnt id="csViolations">
+  <StdViols>
+    <StdViol msg="Declare local variable 'child' as const" ln="45" sev="3" auth="steph" rule="CODSTA-CPP-53" tool="c++test" cat="CODSTA-CPP" lang="cpp" locType="sr" config="1" hash="771052841" locStartln="45" locStartPos="19" locEndLn="45" locEndPos="20" locFile="WordSearch/WordSearch/Source Files/WordSearch.cpp"/>
+  </StdViols>
+</mergePnt>
