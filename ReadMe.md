@@ -17,17 +17,9 @@ FinalLab/
 
 ---
 
-## Building
+## Parasoft
 
-Requires **Visual Studio 2022** targeting **Windows 11**. No third-party libraries are used — only the C++ standard library.
-
-1. Open the solution in Visual Studio 2022
-2. Select the **Release** build configuration (required for accurate performance timing)
-3. Build and run
-
-> ⚠️ Do not use the Debug build for benchmarking. Release mode enables compiler optimisations that significantly affect timing results.
-
----
+<img width="1919" height="1079" alt="image" src="https://github.com/user-attachments/assets/a77485cd-1be7-4b48-8935-8b16e98d7876" />
 
 ## How It Works
 
